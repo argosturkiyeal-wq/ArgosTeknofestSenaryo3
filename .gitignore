@@ -1,0 +1,27 @@
+# Python / Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+venv/
+env/
+
+# Streamlit configuration
+.streamlit/secret.toml
+
+# Video and Image Artifacts
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.jpg
+*.jpeg
+*.png
+
+# Temporary folders
+Kod/frames/
+Kod/*.mp4
