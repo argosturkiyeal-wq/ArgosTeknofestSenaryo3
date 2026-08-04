@@ -10,7 +10,7 @@ venv/
 env/
 
 # Streamlit configuration
-.streamlit/secret.toml
+.streamlit/secrets.toml
 
 # Video and Image Artifacts
 *.mp4
@@ -25,3 +25,12 @@ env/
 # Temporary folders
 Kod/frames/
 Kod/*.mp4
+# Models and weights
+*.gguf
+*.pt
+*.onnx
+runs/
+
+# Docs assets tracked (exception to image rules above)
+!docs/**/*.png
+!docs/**/*.jpg
