@@ -10,7 +10,7 @@ import streamlit as st
 import config
 from core.sampler import save_uploaded_file, cut_video, extract_frames_adaptive, find_best_matching_frame
 from core.vision import MODELS, DEFAULT_TEKNOFEST_PROMPT, check_llama_server_health, run_analysis_generator
-from core.agent import run_aggregator_agent, parse_json_response, save_json_to_file
+from core.agent import run_react_agent, save_json_to_file
 from core.tools import TOOL_REGISTRY, TOOL_CALL_LOG, EVENT_BUS_LOG, mock_saglik_ekibi_cagir, mock_guvenlik_alert_ver, mock_olay_kaydi_olustur
 
 # ============================================================
@@ -31,6 +31,14 @@ if 'metrics' not in st.session_state:
     st.session_state['metrics'] = {}
 if 'parsed_json' not in st.session_state:
     st.session_state['parsed_json'] = None
+if 'react_trace' not in st.session_state:
+    st.session_state['react_trace'] = []
+if 'react_iteration_limit_reached' not in st.session_state:
+    st.session_state['react_iteration_limit_reached'] = False
+if 'react_aborted' not in st.session_state:
+    st.session_state['react_aborted'] = False
+if 'react_abort_reason' not in st.session_state:
+    st.session_state['react_abort_reason'] = None
 if 'saved_json_path' not in st.session_state:
     st.session_state['saved_json_path'] = ""
 if 'extracted_frames_cache' not in st.session_state:
@@ -106,11 +114,15 @@ with st.sidebar:
         st.session_state['video_ready'] = False
         st.session_state['model_result'] = ""
         st.session_state['parsed_json'] = None
+        st.session_state['react_trace'] = []
+        st.session_state['react_iteration_limit_reached'] = False
+        st.session_state['react_aborted'] = False
+        st.session_state['react_abort_reason'] = None
         st.session_state['saved_json_path'] = ""
         st.session_state['metrics'] = {}
         st.session_state['extracted_frames_cache'] = []
 
-def render_analysis_results(container, agent_mode):
+def render_analysis_results(container):
     with container:
         parsed = st.session_state.get('parsed_json')
         saved_path = st.session_state.get('saved_json_path')
@@ -130,9 +142,14 @@ def render_analysis_results(container, agent_mode):
             st.markdown("---")
 
         parse_failed = isinstance(parsed, dict) and parsed.get("status") == "failed"
+        aborted = st.session_state.get('react_aborted', False)
 
-        if parse_failed:
-            st.error(f"❌ Model çıktısı JSON olarak ayrıştırılamadı: {parsed.get('error', 'Bilinmeyen hata')}")
+        if aborted:
+            st.error(f"❌ ReAct döngüsü model sunucusundan yanıt alamadığı için durduruldu: {st.session_state.get('react_abort_reason', 'Bilinmeyen hata')}")
+        elif parse_failed:
+            st.error(f"❌ Model yanıt verdi ama çıktısı geçerli JSON değildi: {parsed.get('error', 'Bilinmeyen hata')}")
+            with st.expander("🔍 Ham Model Çıktısı (hata ayıklama için)"):
+                st.code(st.session_state.get('model_result', ''), language="text")
         elif saved_path:
             st.success(f"✅ Analiz tamamlandı! Çıktı kaydedildi: `{saved_path}`")
             try:
@@ -140,6 +157,17 @@ def render_analysis_results(container, agent_mode):
                     st.download_button("📥 JSON İndir", jf.read(), "analiz_sonucu_v2.json", "application/json")
             except Exception:
                 pass
+
+        # 🔄 REACT ADIM İZİ (gerçek tool-calling loop'unun çalıştırdığı adımlar)
+        trace = st.session_state.get('react_trace', [])
+        if st.session_state.get('react_iteration_limit_reached'):
+            st.warning(f"⚠️ ReAct döngüsü {config.MAX_REACT_ITERATIONS} adımda tamamlanamadı (iterasyon limiti doldu). Bu NİHAİ bir sonuç değildir — aşağıda o ana kadar toplanan adımlar listelidir.")
+        if trace:
+            with st.expander(f"🔄 ReAct Adım İzi ({len(trace)} araç çağrısı)"):
+                for step in trace:
+                    tool_info = TOOL_REGISTRY.get(step["tool"], {"name_tr": step["tool"]})
+                    st.markdown(f"**Adım {step['step']} — {tool_info['name_tr']}**")
+                    st.json({"arguments": step["arguments"], "result": step["result"]})
 
         if parsed and isinstance(parsed, dict) and not parse_failed:
             risk_val = parsed.get("risk", "Bilinmiyor")
@@ -175,27 +203,6 @@ def render_analysis_results(container, agent_mode):
                                 st.image(f"data:image/jpeg;base64,{matched_frame['b64']}", caption=f"[{t_val}] {ev.get('event', '')}", use_container_width=True)
                             else:
                                 st.caption(f"[{t_val}] Görsel kare eşleşti")
-
-            st.markdown("---")
-            st.subheader("🤖 Ajan Tarafından Tetiklenen / Önerilen Araçlar (Tools)")
-            triggered_tools = parsed.get("triggered_tools", [])
-            if triggered_tools and isinstance(triggered_tools, list) and len(triggered_tools) > 0:
-                for t_item in triggered_tools:
-                    if isinstance(t_item, dict):
-                        t_name = t_item.get("tool_name", "")
-                        t_args = t_item.get("args", {})
-                        detay_txt = t_args.get("detay", "") if isinstance(t_args, dict) else str(t_args)
-                        tool_info = TOOL_REGISTRY.get(t_name, {"name_tr": t_name})
-                        st.info(f"⚡ **Araç:** {tool_info['name_tr']} | **Gerekçe:** {detay_txt}")
-
-                        if "İnsan Denetimli" in agent_mode:
-                            if st.button(f"✅ Onayla ve Çalıştır: {tool_info['name_tr']}", key=f"btn_{t_name}"):
-                                if t_name in TOOL_REGISTRY:
-                                    TOOL_REGISTRY[t_name]["func"](detay=detay_txt)
-                                    st.success(f"{tool_info['name_tr']} çalıştırıldı!")
-                                    st.rerun()
-            else:
-                st.write("Özel araç tetikleme ihtiyacı görülmedi.")
 
             st.markdown("---")
             st.subheader("🛡️ Operatör Aksiyon Önerileri & Manuel Butonlar")
@@ -272,10 +279,10 @@ if run_btn:
                     t_vis_end = time.time()
                     vision_time = t_vis_end - t_vis_start
 
-                    # 4. Sentezleme (Aggregator AI)
+                    # 4. Sentezleme (ReAct Ajanı — çok adımlı tool-calling)
                     t_agg_start = time.time()
-                    output_area.info("⏳ **2. Aşama (Nihai Karar Ajanı):** Parçalar sentezleniyor ve JSON üretiliyor...")
-                    final_aggregated_text = run_aggregator_agent(chunk_outputs, prompt_val, model_config)
+                    output_area.info("⏳ **2. Aşama (Nihai Karar Ajanı):** ReAct döngüsü çalışıyor (araçlar tetikleniyor, adımlar zincirleniyor)...")
+                    react_result = run_react_agent(chunk_outputs, prompt_val, model_config)
                     t_agg_end = time.time()
                     agg_time = t_agg_end - t_agg_start
 
@@ -295,20 +302,24 @@ if run_btn:
                     }
 
                     st.session_state['analysis_completed'] = True
-                    st.session_state['model_result'] = final_aggregated_text
+                    st.session_state['model_result'] = react_result["final_raw"]
+                    st.session_state['react_trace'] = react_result["trace"]
+                    st.session_state['react_iteration_limit_reached'] = react_result["iteration_limit_reached"]
+                    st.session_state['react_aborted'] = react_result["aborted"]
+                    st.session_state['react_abort_reason'] = react_result["abort_reason"]
 
-                    parsed_result = parse_json_response(final_aggregated_text)
+                    parsed_result = react_result["final"]
                     st.session_state['parsed_json'] = parsed_result
 
                     parse_failed = isinstance(parsed_result, dict) and parsed_result.get("status") == "failed"
 
-                    if parse_failed:
+                    if parse_failed or parsed_result is None:
                         st.session_state['saved_json_path'] = ""
                     else:
-                        saved_path = save_json_to_file(parsed_result, final_aggregated_text, st.session_state['metrics'])
+                        saved_path = save_json_to_file(parsed_result, react_result["final_raw"], st.session_state['metrics'])
                         st.session_state['saved_json_path'] = saved_path
 
-                    render_analysis_results(result_container, agent_mode)
+                    render_analysis_results(result_container)
                 else:
                     st.error("Frame çıkarılamadı!")
             else:
@@ -319,7 +330,7 @@ if st.session_state.get('video_ready') and not run_btn:
     video_placeholder.video(VIDEO_OUTPUT_PATH)
 
 if st.session_state.get('analysis_completed') and not run_btn:
-    render_analysis_results(result_container, agent_mode)
+    render_analysis_results(result_container)
 
 if not run_btn and not st.session_state.get('video_ready'):
     video_placeholder.info("⬅️ Sol menüden ayarları yapıp 'Analiz ve Karar Destek Başlat' butonuna basın.")

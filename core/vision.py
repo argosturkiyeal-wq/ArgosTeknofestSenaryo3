@@ -20,6 +20,8 @@ MODELS = {
 DEFAULT_TEKNOFEST_PROMPT = """Sen bir Savunma Sanayii ve Saha Operasyonu Güvenlik Karar Destek Ajanısın.
 Verilen video karelerini zamansal akış içinde analiz et. Her kareye karşılık gelen zaman damgası [Zaman Damgası: MM:SS] şeklinde etiketlenmiştir.
 
+Sadece karelerde açıkça gördüğün nesneleri ve olayları yaz. Bir mekan türü, nesne veya kişi rolü hakkında emin değilsen tahmin etme; 'belirsiz' de. Görmediğin bir detayı asla uydurma.
+
 Kullanabileceğin Otonom Araçlar (Tools):
 1. mock_saglik_ekibi_cagir(detay): Yaralanma, düşme veya hareketsiz kişi durumlarında tetikle.
 2. mock_guvenlik_alert_ver(detay): Güvenlik ihlali, tehlikeli bölgeye yaklaşma veya riskli durumlarda tetikle.
