@@ -7,10 +7,13 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 # Filesystem paths
-KOD_DIR = Path(os.getenv("KOD_DIR", str(BASE_DIR / "Kod")))
-FRAMES_DIR = Path(os.getenv("FRAMES_DIR", str(KOD_DIR / "frames")))
-VIDEO_OUTPUT_PATH = Path(os.getenv("VIDEO_OUTPUT_PATH", str(KOD_DIR / "video_kesit.mp4")))
-JSON_OUTPUT_PATH = Path(os.getenv("JSON_OUTPUT_PATH", str(KOD_DIR / "analiz_sonucu_v2.json")))
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(BASE_DIR / "outputs")))
+FRAMES_DIR = Path(os.getenv("FRAMES_DIR", str(OUTPUT_DIR / "frames")))
+VIDEO_OUTPUT_PATH = Path(os.getenv("VIDEO_OUTPUT_PATH", str(OUTPUT_DIR / "video_kesit.mp4")))
+JSON_OUTPUT_PATH = Path(os.getenv("JSON_OUTPUT_PATH", str(OUTPUT_DIR / "analiz_sonucu.json")))
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_PATH = Path(os.getenv("MODEL_PATH", str(BASE_DIR / "models" / "Qwen3VL-8B-Instruct-Q4_K_M.gguf")))
 MMPROJ_PATH = Path(os.getenv("MMPROJ_PATH", str(BASE_DIR / "models" / "mmproj-Qwen3VL-8B-Instruct-F16.gguf")))
 
