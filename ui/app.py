@@ -1,4 +1,5 @@
 import sys
+import json
 import time
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import config
 from core.sampler import save_uploaded_file, cut_video, extract_frames_adaptive, find_best_matching_frame
 from core.vision import MODELS, DEFAULT_TEKNOFEST_PROMPT, check_llama_server_health, run_analysis_generator
 from core.agent import run_aggregator_agent, parse_json_response, save_json_to_file
-from core.tools import TOOLS, execute_agent_tools, mock_saglik_ekibi_cagir, mock_guvenlik_alert_ver, mock_olay_kaydi_olustur
+from core.tools import TOOL_REGISTRY, TOOL_CALL_LOG, EVENT_BUS_LOG, mock_saglik_ekibi_cagir, mock_guvenlik_alert_ver, mock_olay_kaydi_olustur
 
 # ============================================================
 # AYARLAR VE SABİTLER
@@ -30,8 +31,6 @@ if 'metrics' not in st.session_state:
     st.session_state['metrics'] = {}
 if 'parsed_json' not in st.session_state:
     st.session_state['parsed_json'] = None
-if 'action_logs' not in st.session_state:
-    st.session_state['action_logs'] = []
 if 'saved_json_path' not in st.session_state:
     st.session_state['saved_json_path'] = ""
 if 'extracted_frames_cache' not in st.session_state:
@@ -108,7 +107,6 @@ with st.sidebar:
         st.session_state['model_result'] = ""
         st.session_state['parsed_json'] = None
         st.session_state['saved_json_path'] = ""
-        st.session_state['action_logs'] = []
         st.session_state['metrics'] = {}
         st.session_state['extracted_frames_cache'] = []
 
@@ -187,13 +185,13 @@ def render_analysis_results(container, agent_mode):
                         t_name = t_item.get("tool_name", "")
                         t_args = t_item.get("args", {})
                         detay_txt = t_args.get("detay", "") if isinstance(t_args, dict) else str(t_args)
-                        tool_info = TOOLS.get(t_name, {"name_tr": t_name})
+                        tool_info = TOOL_REGISTRY.get(t_name, {"name_tr": t_name})
                         st.info(f"⚡ **Araç:** {tool_info['name_tr']} | **Gerekçe:** {detay_txt}")
 
                         if "İnsan Denetimli" in agent_mode:
                             if st.button(f"✅ Onayla ve Çalıştır: {tool_info['name_tr']}", key=f"btn_{t_name}"):
-                                if t_name in TOOLS:
-                                    TOOLS[t_name]["func"](detay=detay_txt)
+                                if t_name in TOOL_REGISTRY:
+                                    TOOL_REGISTRY[t_name]["func"](detay=detay_txt)
                                     st.success(f"{tool_info['name_tr']} çalıştırıldı!")
                                     st.rerun()
             else:
@@ -217,11 +215,14 @@ def render_analysis_results(container, agent_mode):
                     mock_olay_kaydi_olustur(parsed.get('summary', 'Olay kaydı'))
                     st.success("Olay günlüğe kaydedildi!")
 
-        if st.session_state.get('action_logs'):
+        if TOOL_CALL_LOG or EVENT_BUS_LOG:
             st.markdown("---")
             st.subheader("📜 Event Bus & Tetiklenen Sistem İşlem Günlüğü (Logs)")
-            for l in st.session_state['action_logs']:
-                st.code(l, language="text")
+            for entry in TOOL_CALL_LOG:
+                tool_info = TOOL_REGISTRY.get(entry["tool"], {"name_tr": entry["tool"]})
+                st.code(f"[{entry['ts']}] 🔧 {tool_info['name_tr']} — args: {entry['arguments']} -> sonuç: {entry['result']}", language="text")
+            for entry in EVENT_BUS_LOG:
+                st.code(f"[{entry['ts']}] 📡 [EVENT BUS - {entry['topic']}] Payload: {json.dumps(entry['payload'], ensure_ascii=False)}", language="text")
 
 # --- ANA EKRAN ---
 col_video, col_result = st.columns([1.2, 1.8])
@@ -306,9 +307,6 @@ if run_btn:
                     else:
                         saved_path = save_json_to_file(parsed_result, final_aggregated_text, st.session_state['metrics'])
                         st.session_state['saved_json_path'] = saved_path
-
-                        is_auto = "Tam Otonom" in agent_mode
-                        execute_agent_tools(parsed_result, auto_execute=is_auto)
 
                     render_analysis_results(result_container, agent_mode)
                 else:
