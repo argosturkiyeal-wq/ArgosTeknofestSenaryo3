@@ -7,38 +7,33 @@ import shutil
 import json
 import re
 import base64
+import logging
 import requests
 import numpy as np
 from datetime import datetime
 
+import config
+
+logger = logging.getLogger(__name__)
+
 # ============================================================
 # AYARLAR VE SABİTLER
 # ============================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-KOD_DIR = os.path.join(BASE_DIR, "Kod")
-FRAMES_DIR = os.path.join(KOD_DIR, "frames")
-VIDEO_OUTPUT_PATH = os.path.join(KOD_DIR, "video_kesit.mp4")
-JSON_OUTPUT_PATH = os.path.join(KOD_DIR, "analiz_sonucu_v2.json")
+KOD_DIR = str(config.KOD_DIR)
+FRAMES_DIR = str(config.FRAMES_DIR)
+VIDEO_OUTPUT_PATH = str(config.VIDEO_OUTPUT_PATH)
+JSON_OUTPUT_PATH = str(config.JSON_OUTPUT_PATH)
 
-# Model ve Araç Yolları
-LLAMA_CLI = "/home/rabia/llama.cpp/build_120a/bin/llama-cli"
-LLAMA_SERVER_URL = "http://127.0.0.1:8080/v1/chat/completions"
+LLAMA_SERVER_URL = config.LLAMA_SERVER_URL
 
 # Model Konfigürasyonları
 MODELS = {
     "8B": {
-        "model_path": "/home/rabia/llama.cpp/models/Qwen3-VL-8B/Qwen3VL-8B-Instruct-Q8_0.gguf",
-        "mmproj_path": "/home/rabia/llama.cpp/models/Qwen3-VL-8B/mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf",
+        "model_path": str(config.MODEL_PATH),
+        "mmproj_path": str(config.MMPROJ_PATH),
         "ngl": "28",
         "ctx": "24576",
         "ub": "4096"
-    },
-    "32B": {
-        "model_path": "/home/rabia/llama.cpp/models/Qwen3-VL-32B/Qwen3-VL-32B-Instruct.Q5_K_M.gguf",
-        "mmproj_path": "/home/rabia/llama.cpp/models/Qwen3-VL-32B/Qwen3-VL-32B-Instruct.mmproj-f16.gguf",
-        "ngl": "0",
-        "ctx": "24576",
-        "ub": "24576"
     }
 }
 
@@ -210,7 +205,7 @@ def cut_video(source_path, start_sec, end_sec, output_path):
     t0 = time.time()
     duration = end_sec - start_sec
     cmd = [
-        "ffmpeg", "-y",
+        config.FFMPEG_BINARY, "-y",
         "-ss", str(start_sec),
         "-i", source_path,
         "-t", str(duration),
@@ -316,33 +311,29 @@ def parse_json_response(raw_text):
     if not raw_text:
         return None
 
+    last_exc = None
+
     try:
         return json.loads(raw_text)
-    except Exception:
-        pass
+    except Exception as e:
+        last_exc = e
 
     json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group(1))
-        except Exception:
-            pass
+        except Exception as e:
+            last_exc = e
 
     bracket_match = re.search(r'(\{.*?\})', raw_text, re.DOTALL)
     if bracket_match:
         try:
             return json.loads(bracket_match.group(1))
-        except Exception:
-            pass
+        except Exception as e:
+            last_exc = e
 
-    clean_text = re.sub(r'⚠️ Sunucuya bağlanılamadı.*', '', raw_text).strip()
-    return {
-        "summary": clean_text if clean_text else "Analiz tamamlandı.",
-        "events": [{"time": "00:00", "event": "Video analizi tamamlandı"}],
-        "risk": "Orta" if any(w in clean_text.lower() for w in ["faul", "kaza", "düşme", "risk", "tehlike", "ihlal", "yaralanma"]) else "Düşük",
-        "actions": ["Saha durumunu ve operasyonu takip etmeye devam et"],
-        "triggered_tools": []
-    }
+    logger.error("JSON parse failed: %s | raw response head: %r", last_exc, raw_text[:200])
+    return {"status": "failed", "error": str(last_exc)}
 
 def save_json_to_file(parsed_data, raw_text, telemetry_metrics):
     try:
@@ -395,14 +386,15 @@ def run_analysis_generator(image_items, prompt, model_config):
         })
     
     payload = {
+        "model": config.MODEL_NAME,
         "messages": [{"role": "user", "content": content}],
-        "temperature": 0.1,
-        "max_tokens": 1500,
+        "temperature": config.TEMPERATURE,
+        "max_tokens": config.VISION_MAX_TOKENS,
         "repeat_penalty": 1.2
     }
-    
+
     try:
-        response = requests.post(LLAMA_SERVER_URL, json=payload, timeout=120)
+        response = requests.post(LLAMA_SERVER_URL, json=payload, timeout=config.REQUEST_TIMEOUT)
         if response.status_code == 200:
             result = response.json()
             text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -453,20 +445,21 @@ Gözlemleri sentezle. Çıktıyı SADECE ve KESİNLİKLE aşağıdaki JSON forma
 }}"""
 
     payload = {
+        "model": config.MODEL_NAME,
         "messages": [{"role": "user", "content": aggregator_prompt}],
-        "temperature": 0.1,
-        "max_tokens": 1200,
+        "temperature": config.TEMPERATURE,
+        "max_tokens": config.AGGREGATOR_MAX_TOKENS,
         "response_format": {"type": "json_object"}
     }
-    
+
     try:
-        response = requests.post(LLAMA_SERVER_URL, json=payload, timeout=90)
+        response = requests.post(LLAMA_SERVER_URL, json=payload, timeout=config.AGGREGATOR_REQUEST_TIMEOUT)
         if response.status_code == 200:
             result = response.json()
             return result.get("choices", [{}])[0].get("message", {}).get("content", "")
         else:
             payload.pop("response_format", None)
-            res2 = requests.post(LLAMA_SERVER_URL, json=payload, timeout=90)
+            res2 = requests.post(LLAMA_SERVER_URL, json=payload, timeout=config.AGGREGATOR_REQUEST_TIMEOUT)
             if res2.status_code == 200:
                 return res2.json().get("choices", [{}])[0].get("message", {}).get("content", "")
     except Exception:
@@ -492,7 +485,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("⚙️ Model ve Örnekleme Ayarları")
-    selected_model = st.selectbox("Model", options=["8B", "32B"], index=0)
+    selected_model = st.selectbox("Model", options=["8B"], index=0)
     
     sampling_mode = st.selectbox(
         "Kare Örnekleme Modu (Savant Style)",
@@ -532,8 +525,8 @@ with st.sidebar:
     max_dim_map = {"🚀 Hızlı (640px)": 640, "⚖️ Dengeli (896px)": 896, "🔍 Orijinal": 0}
     target_max_dim = max_dim_map[resolution_option]
 
-    fps_val = st.number_input("FPS (Hedef Kare Sıklığı)", 1, 30, 2)
-    chunk_size = st.number_input("Chunk Boyutu", 1, 100, 10)
+    fps_val = st.number_input("FPS (Hedef Kare Sıklığı)", 1, 30, config.DEFAULT_FPS)
+    chunk_size = st.number_input("Chunk Boyutu", 1, 100, config.DEFAULT_CHUNK_SIZE)
     
     prompt_val = st.text_area("İstem (System Prompt)", value=DEFAULT_TEKNOFEST_PROMPT, height=200)
     
@@ -568,7 +561,11 @@ def render_analysis_results(container, agent_mode):
             m6.metric("İşlem Hızı", f"{metrics.get('throughput_fps', 0):.1f} FPS")
             st.markdown("---")
 
-        if saved_path:
+        parse_failed = isinstance(parsed, dict) and parsed.get("status") == "failed"
+
+        if parse_failed:
+            st.error(f"❌ Model çıktısı JSON olarak ayrıştırılamadı: {parsed.get('error', 'Bilinmeyen hata')}")
+        elif saved_path:
             st.success(f"✅ Analiz tamamlandı! Çıktı kaydedildi: `{saved_path}`")
             try:
                 with open(saved_path, "r", encoding="utf-8") as jf:
@@ -576,7 +573,7 @@ def render_analysis_results(container, agent_mode):
             except Exception:
                 pass
 
-        if parsed and isinstance(parsed, dict):
+        if parsed and isinstance(parsed, dict) and not parse_failed:
             risk_val = parsed.get("risk", "Bilinmiyor")
             risk_color = "🔴" if any(r in str(risk_val).lower() for r in ["yüksek", "kritik", "danger"]) else ("🟡" if "orta" in str(risk_val).lower() else "🟢")
             
@@ -731,12 +728,17 @@ if run_btn:
                     
                     parsed_result = parse_json_response(final_aggregated_text)
                     st.session_state['parsed_json'] = parsed_result
-                    
-                    saved_path = save_json_to_file(parsed_result, final_aggregated_text, st.session_state['metrics'])
-                    st.session_state['saved_json_path'] = saved_path
 
-                    is_auto = "Tam Otonom" in agent_mode
-                    execute_agent_tools(parsed_result, auto_execute=is_auto)
+                    parse_failed = isinstance(parsed_result, dict) and parsed_result.get("status") == "failed"
+
+                    if parse_failed:
+                        st.session_state['saved_json_path'] = ""
+                    else:
+                        saved_path = save_json_to_file(parsed_result, final_aggregated_text, st.session_state['metrics'])
+                        st.session_state['saved_json_path'] = saved_path
+
+                        is_auto = "Tam Otonom" in agent_mode
+                        execute_agent_tools(parsed_result, auto_execute=is_auto)
 
                     render_analysis_results(result_container, agent_mode)
                 else:
