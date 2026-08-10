@@ -31,6 +31,22 @@ Kod/*.mp4
 *.onnx
 runs/
 
+
+
+
+# Ground truth must be tracked (exception to *.json above)
+!data/ground_truth/**/*.json
+
+# Models and weights
+*.gguf
+*.pt
+*.onnx
+runs/
+
 # Docs assets tracked (exception to image rules above)
 !docs/**/*.png
 !docs/**/*.jpg
+
+# Analysis outputs
+outputs/
+analiz_sonucu*.json
