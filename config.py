@@ -39,3 +39,10 @@ DEFAULT_CHUNK_SIZE = int(os.getenv("DEFAULT_CHUNK_SIZE", "10"))
 MAX_REACT_ITERATIONS = int(os.getenv("MAX_REACT_ITERATIONS", "5"))
 REACT_MAX_TOKENS = int(os.getenv("REACT_MAX_TOKENS", "800"))
 REACT_REQUEST_TIMEOUT = int(os.getenv("REACT_REQUEST_TIMEOUT", "120"))
+
+# Hafıza (memory) katmanı
+DB_PATH = Path(os.getenv("DB_PATH", str(OUTPUT_DIR / "memory.db")))
+OLAY_TIPLERI = [
+    "kkd_ihlali", "dusme", "arac_kazasi", "tehlikeli_yakinlik",
+    "bolge_ihlali", "yetkisiz_giris", "personel_toplanmasi", "diger"
+]

@@ -7,16 +7,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.agent import run_react_agent
 
 HARDCODED_OBSERVATIONS = [
-    "[00:05] Sahada iki işçi forklift ile malzeme taşıyor, ikisi de baretli ve yelekli.",
-    "[00:15] Forklift ani manevra yaptı, bir işçi dengesini kaybedip yere düştü ve hareketsiz kalıyor. Konum: Depo B, Hat 3.",
-    "[00:20] İkinci işçi yerdeki kişinin yanına gitti; bu işçi baretsiz ve yeleksiz çalışıyor.",
+    "[00:05] Sahada iki işçi forklift ile malzeme taşıyor. Konum: Yükleme Rampası.",
+    "[00:15] Forklift ani manevra yaptı, bir işçi dengesini kaybedip yere düştü ve hareketsiz kalıyor. Konum: Yükleme Rampası.",
+    "[00:20] İkinci işçi yerdeki kişinin yanına gitti; bu işçi baretsiz ve yeleksiz çalışıyor. Konum: Yükleme Rampası.",
 ]
 
 USER_PROMPT = "Sahadaki durumu değerlendir ve gerekli aksiyonları al."
 
 
 def main():
-    print("=== ReAct test — video/frame extraction atlanıyor, hardcoded gözlemler kullanılıyor ===\n")
+    print("=== ReAct test — video/frame extraction atlanıyor, hardcoded gözlemler kullanılıyor ===")
+    print("(Hafıza örüntüsünü de test etmek için önce: python scripts/seed_memory.py)\n")
 
     result = run_react_agent(HARDCODED_OBSERVATIONS, USER_PROMPT, model_config=None)
 
@@ -32,6 +33,9 @@ def main():
         print(f"  args   : {json.dumps(step['arguments'], ensure_ascii=False)}")
         print(f"  result : {json.dumps(step['result'], ensure_ascii=False)}")
         print()
+
+    gecmis_cagrildi = any(step["tool"] == "mock_gecmis_sorgula" for step in result["trace"])
+    print(f"mock_gecmis_sorgula çağrıldı mı: {gecmis_cagrildi}\n")
 
     print("--- FINAL ---")
     if result["final"]:

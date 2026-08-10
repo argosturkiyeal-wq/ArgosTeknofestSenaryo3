@@ -50,3 +50,6 @@ runs/
 # Analysis outputs
 outputs/
 analiz_sonucu*.json
+
+# Hafıza veritabanı
+*.db

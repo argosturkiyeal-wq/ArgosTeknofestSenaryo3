@@ -1,6 +1,9 @@
 import random
 from datetime import datetime, timedelta
 
+import config
+import core.memory as memory
+
 # ============================================================
 # SAVANT TİPİ EVENT BUS
 # ============================================================
@@ -103,6 +106,14 @@ def mock_kkd_ihlali_raporla(kisi_sayisi=0, ihlal_tipi="baretsiz"):
     publish_event_to_bus("PPE_VIOLATION_REPORTED", {"kisi_sayisi": kisi_sayisi, "ihlal_tipi": ihlal_tipi, "rapor_no": rapor_no})
     return result
 
+def mock_gecmis_sorgula(bolge="", gun_sayisi=7, olay_tipi=None):
+    kayitlar = memory.sorgula(bolge=bolge, gun_sayisi=gun_sayisi, olay_tipi=olay_tipi)
+    return {
+        "status": "ok",
+        "kayit_sayisi": len(kayitlar),
+        "ozet": memory.ozet_cikar(kayitlar)
+    }
+
 # ============================================================
 # ARAÇ KAYIT DEFTERİ (Turkce isim + calistirilabilir fonksiyon)
 # ============================================================
@@ -141,6 +152,11 @@ TOOL_REGISTRY = {
         "func": mock_kkd_ihlali_raporla,
         "description": "Kişisel koruyucu donanım (KKD) ihlalini raporlar.",
         "name_tr": "⛑️ KKD İhlali Raporla"
+    },
+    "mock_gecmis_sorgula": {
+        "func": mock_gecmis_sorgula,
+        "description": "Bölge bazlı geçmiş olay kayıtlarını sorgular, tekrar eden örüntüleri tespit eder.",
+        "name_tr": "🗂️ Geçmişi Sorgula"
     },
 }
 
@@ -258,6 +274,26 @@ TOOLS = [
                     }
                 },
                 "required": ["kisi_sayisi", "ihlal_tipi"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mock_gecmis_sorgula",
+            "description": "Belirtilen bölgedeki geçmiş olay kayıtlarını sorgular. Tekrar eden bir ihlal/olay tipinden şüphelenildiğinde, örüntü olup olmadığını kontrol etmek için kullanılır.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "bolge": {"type": "string", "description": "Sorgulanacak bölge/konum adı."},
+                    "gun_sayisi": {"type": "integer", "description": "Kaç günlük geçmişe bakılacağı (belirtilmezse 7)."},
+                    "olay_tipi": {
+                        "type": "string",
+                        "enum": config.OLAY_TIPLERI,
+                        "description": "Sadece belirli bir olay tipine bakmak için (opsiyonel)."
+                    }
+                },
+                "required": ["bolge"]
             }
         }
     },
