@@ -1,33 +1,19 @@
 # 🛸 TEKNOFEST 2026 Yapay Zeka Dil Ajanları Yarışması
 ## Senaryo 3: Video Analiz ve Operasyonel Karar Destek Ajanı
 
-> **GitHub Etiketi:** `BilisimVadisi2026`  
-> **Lisans:** Apache License 2.0  
-> **Çalışma Modu:** %100 Çevrimdışı (Offline) / Yerel (Local)  
+> **GitHub Etiketi:** `BilisimVadisi2026`
+> **Lisans:** Apache License 2.0
+> **Çalışma Modu:** %100 Çevrimdışı (Offline) / Yerel (Local)
 
 ---
 
 ## 📌 Proje Hakkında
 
-Bu proje, savunma sanayii tesisleri ve saha operasyonları için geliştirilmiş **Çoklu Ortam (Multimodal) Video Analiz ve Operasyonel Karar Destek Ajanı** sistemidir.
+Bu proje, savunma sanayii tesisleri ve saha operasyonları için geliştirilmiş **çoklu ortam (multimodal) video analiz ve operasyonel karar destek ajanı** sistemidir.
 
-Sistem; video girdilerini zamansal akış içinde analiz eder, kritik olayları zaman damgasıyla (`MM:SS`) tespit eder, risk seviyelerini belirler ve tespit edilen durumlara göre **otonom araçları (Tools - Sağlık Ekibi, Güvenlik Bildirimi, Olay Kaydı)** otonom olarak tetikler.
+Sistem bir video girdisini alır, kareleri zamansal akış içinde bir görsel dil modeline (Qwen3-VL) analiz ettirir, ardından **gerçek bir ReAct döngüsü** ile — model gerektikçe araç çağırır, araç sonucunu görür, bir sonraki adıma karar verir — operasyonel aksiyonları (sağlık ekibi çağırma, alan kapatma, olay kaydı vb.) tetikler ve son olarak zaman damgalı olaylar, risk seviyesi ve aksiyon önerileri içeren yapılandırılmış bir Türkçe özet üretir.
 
-Projemiz iki farklı versiyona sahiptir:
-- **v1 (`teknofest/v1.py`):** Standart Sabit FPS Kare Örneklemeli Temel Versiyon.
-- **v2 (`teknofest/v2.py`):** Savant Mimari Fikirleri entegre edilmiş, **Adaptif (Sahne Duyarlı) FPS Örneklemeli**, **Gecikme Telemetri Analizli** ve **Kritik Olay Görsel Galerili** Gelişmiş Versiyon.
-
----
-
-## ⚡ v1 (`v1.py`) vs v2 (`v2.py`) Farkları ve FPS Karşılaştırması
-
-| Özellik / Kriter | v1 (`teknofest/v1.py`) | v2 (`teknofest/v2.py` - Savant Mimari Entegreli) |
-| :--- | :--- | :--- |
-| **Kare Örnekleme (FPS) Modu** | **Sabit FPS (Fixed Sampling):** Videoda hareket olsun ya da olmasın sabit zaman aralıklarıyla (örn. her 2 sn'de 1) kare çıkarır. | **Adaptif / Sahne Duyarlı (Adaptive Motion FPS):** OpenCV `cv2.absdiff` ile sahneler arası hareket seviyesini ölçer. Durağan sahnelerde örneklemeyi otomatik 2 kat seyrekleştirir, kaza/hareket anında sıklaştırır. |
-| **Vision Token ve Çıkarım Hızı** | Yüksek sayıda sabit kare işlendiği için Vision Token harcaması yüksektir. | Durağan kareleri eleyerek **Vision Token sayısını %40-%60 oranında azaltır** ve **çıkarım hızını yaklaşık 2 katına çıkarır**. |
-| **Performans & Telemetri İzleme** | Yalnızca toplam analiz süresi gösterilir. | **Savant Tarzı Telemetri Panosu:** Video Kırpma ($T_{cut}$), Kare Çıkarma ($T_{extract}$), Görsel AI ($T_{vision}$), Karar Sentez ($T_{agg}$), Uçtan Uca Süre ($T_{total}$) ve FPS Hızı anlık ölçülür. |
-| **Kritik Olay Görsel Vurgulayıcı** | Sadece metinsel olay listesi sunulur. | **Thumbnail Highlights:** Olay tespit edilen anların (`00:15`) karesini otomatik resim önizleme kartı olarak sergiler. |
-| **Çoklu Sistem Yayıncısı (Event Bus)** | Sadece dahili Streamlit log kaydı tutar. | **Mock Event Bus:** Tetiklenen araçları harici sistemlere (kuyruk/webhook mock) JSON yayıncısı olarak iletir. |
+Tamamen yerel çalışır: video analizini yapan model kendi makinenizde `llama-server` (llama.cpp) ile servis edilir, hiçbir bulut API'sine veya kapalı servise bağımlılık yoktur.
 
 ---
 
@@ -35,97 +21,134 @@ Projemiz iki farklı versiyona sahiptir:
 
 ```mermaid
 graph TD
-    A[📹 Video Yükleme] --> B[⏱️ Ffmpeg & OpenCV Zamansal Kare Çıkarma]
-    B -->|v1: Sabit FPS / v2: Adaptif Sahne Duyarlı FPS| C[🖼️ 1. Aşama: Görsel Algı Ajanı Qwen3-VL]
-    C --> D[🧩 Zaman Damgalı Parça Gözlemleri]
-    D --> E[🤖 2. Aşama: Nihai Karar Destek & Sentez Ajanı]
-    E --> F[🛡️ Otonom Araç Tetikleyici ReAct Loop]
-    F --> G[🚨 Mock Sağlık Ekibi]
-    F --> H[🛡️ Mock Güvenlik İhlal Uyarısı]
-    F --> I[📝 Mock Olay/Kaza Kaydı]
-    F -->|v2 Özelliği| K[📡 Mock Event Bus Publisher]
-    E --> J[📄 Yapılandırılmış JSON & Streamlit Canlı Kartlar]
-    E -->|v2 Özelliği| L[📸 Kritik Olay Görsel Galerisi & 📊 Telemetri Panosu]
+    A[📹 Video Yükleme] --> B[✂️ ffmpeg: Video Kesme]
+    B --> C[🖼️ OpenCV: Adaptif / Sabit Kare Örnekleme]
+    C --> D[🧠 Görsel Algı — Qwen3-VL, kare başına]
+    D --> E[🧩 Zaman Damgalı Parça Gözlemleri]
+    E --> F{🔁 ReAct Döngüsü}
+    F -->|tool_call| G[🛠️ 7 Mock Araç: sağlık, güvenlik, olay kaydı, alan kapatma, kamera, vardiya, KKD]
+    G -->|sonuç mesaj geçmişine| F
+    F -->|final| H[📄 Yapılandırılmış JSON: özet, olaylar, risk, aksiyonlar]
+    H --> I[🖥️ Streamlit Arayüzü: adım izi, telemetri, karar panosu]
+
+    J[🎯 core/detection.py — planlanan] -.-> D
+    K[📊 core/benchmark.py — planlanan] -.-> H
+```
+
+Kesikli çizgili kutular (`detection.py`, `benchmark.py`) henüz boş stub — bkz. [Devam eden çalışma](#-devam-eden-çalışma).
+
+---
+
+## 📂 Proje Yapısı
+
+```
+config.py              # Tüm ayarlar — .env'den okunur, hardcoded path yok
+core/
+  sampler.py             # Video kesme (ffmpeg) + adaptif/sabit kare örnekleme (OpenCV)
+  vision.py               # Kare başına görsel analiz — VLM çağrıları, sunucu health check
+  agent.py                  # ReAct döngüsü: model ↔ araç çok adımlı zincirleme, final JSON sentezi
+  tools.py                    # 7 mock araç + OpenAI-format şemalar + execute_tool dispatcher
+  detection.py                  # BOŞ — YOLO tabanlı nesne tespiti (planlı)
+  benchmark.py                    # BOŞ — P/R/F1 değerlendirme (planlı)
+ui/
+  app.py                # Streamlit arayüzü — sadece UI, iş mantığı içermez
+scripts/
+  test_react.py         # Video beklemeden ReAct döngüsünü hızlı test etme
+SETUP.md                # Sıfırdan kurulum kılavuzu (Python, CUDA, llama.cpp derleme, model indirme dahil)
 ```
 
 ---
 
-## 🛠️ Başlatma Talimatları ve Komutlar
+## ⚡ Hızlı Başlangıç
 
-### 1. Adım: Model Sunucusunun Başlatılması (`llama-server`)
+Aşağıdakiler sadece özet komutlardır. Python/Git/CMake/Visual Studio Build Tools/CUDA kurulumundan model dosyalarının indirilmesine, VRAM'e göre parametre ayarına ve sık karşılaşılan hatalara kadar **adım adım, ekip için yazılmış tam kılavuz için → [`SETUP.md`](./SETUP.md)**.
 
-Modeller %100 çevrimdışı (offline) ve yerel olarak `llama-server` ile çalıştırılır. Aşağıdaki komutu ayrı bir terminalde çalıştırın:
+```powershell
+git clone https://gitlab.com/argosturkiyeai/repo.git
+cd repo
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+# .env içine kendi MODEL_PATH / MMPROJ_PATH yollarınızı yazın
+```
 
-```bash
-/home/rabia/llama.cpp/build_120a/bin/llama-server \
-  -m /home/rabia/llama.cpp/models/Qwen3-VL-8B/Qwen3VL-8B-Instruct-Q8_0.gguf \
-  --mmproj /home/rabia/llama.cpp/models/Qwen3-VL-8B/mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf \
-  --host 127.0.0.1 \
-  --port 8080 \
-  -c 24576 \
-  -ub 4096 \
-  -np 2 \
-  -ngl 28 \
-  -fa 1
+Model sunucusunu ayrı bir terminalde başlatın (`--jinja` zorunlu — tool-calling için gerekli):
+
+```powershell
+& "<llama.cpp klasörünüz>\build\bin\Release\llama-server.exe" `
+  -m "<MODEL_PATH>" --mmproj "<MMPROJ_PATH>" `
+  --host 127.0.0.1 --port 8080 -c 8192 -ub 512 -ngl 20 -fa 1 --jinja
+```
+
+Uygulamayı başlatın:
+
+```powershell
+streamlit run ui/app.py
+```
+
+Video beklemeden ReAct döngüsünü hızlı test etmek için:
+
+```powershell
+python scripts\test_react.py
 ```
 
 ---
 
-### 2. Adım: Kullanıcı Arayüzünün Başlatılması
+## 🧠 Model Servisleme
 
-Bulunduğunuz dizine göre komutu çalıştırabilirsiniz:
+Model servisleme için **llama.cpp (`llama-server`)** kullanılıyor — Qwen3-VL'i GGUF formatında, OpenAI-uyumlu `/v1/chat/completions` API'siyle ve `--jinja` desteğiyle gerçek tool-calling (function calling) sunuyor.
 
-#### 🟢 Ana Proje Dizininden (`/home/rabia/llama.cpp`):
-```bash
-# Versiyon 1 (Standart):
-streamlit run teknofest/v1.py
-
-# Versiyon 2 (Savant Mimari & Adaptif FPS):
-streamlit run teknofest/v2.py
-```
-
-#### 🟢 `teknofest` Klasörü İçinden (`/home/rabia/llama.cpp/teknofest`):
-```bash
-cd teknofest
-
-# Versiyon 1:
-streamlit run v1.py
-
-# Versiyon 2:
-streamlit run v2.py
-```
+Şartname `vLLM veya benzeri yerel model servisleme altyapısı` istiyor; vLLM yerine llama.cpp tercih edilme gerekçesi:
+- **Windows'ta yerel derleme/çalıştırma desteği** (ekibin geliştirme ortamı Windows) — vLLM'in Windows desteği sınırlı.
+- **GGUF kuantizasyon ekosistemi** — düşük VRAM'li kartlarda (6 GB gibi) modeli çalıştırılabilir kılan Q4_K_M/Q8_0 gibi kuantizasyonlara doğrudan erişim.
+- **`--jinja` ile tool-calling** — OpenAI-format `tools` parametresini doğru şekilde işleyip yapılandırılmış `tool_calls` üretebiliyor, bu projenin ReAct döngüsünün temel bağımlılığı.
 
 ---
 
-## 📊 Benchmark ve Ölçümleme (KPI)
+## 🛠️ Araçlar (Mock Tools)
 
-Şartnamenin 4. ve 7. maddelerine uygun olarak sistemin gecikme süresini (latency) ve doğru araç tetikleme metriklerini test etmek için:
+Ajan, ReAct döngüsü sırasında aşağıdaki 7 aracı gerçek OpenAI-format function-calling ile (`core/tools.py`) çağırabilir. Her araç gerçekçi bir mock sonuç (bilet numarası, ETA, onaylanmış aksiyon vb.) döndürür, sonuç mesaj geçmişine geri beslenir:
 
-```bash
-python3 teknofest/benchmark.py
-```
-Ölçüm raporu otomatik olarak `teknofest/Kod/benchmark_report.json` dosyasına işlenecektir.
+| Araç | Ne yapar |
+|---|---|
+| `mock_saglik_ekibi_cagir` | Yaralanma/acil durumda sağlık ekibi çağırır (konum, aciliyet) |
+| `mock_guvenlik_alert_ver` | Güvenlik ihlali/tehlikede güvenlik birimini uyarır (seviye) |
+| `mock_olay_kaydi_olustur` | Kaza/olay/kural ihlali için kayıt oluşturur (olay tipi) |
+| `mock_alan_kapat` | Tehlikeli bölgeyi belirli süreliğine kapatır |
+| `mock_kamera_yonlendir` | Sahadaki bir kamerayı hedef bölgeye yönlendirir |
+| `mock_vardiya_amirine_bildir` | Vardiya amirine öncelikli mesaj iletir |
+| `mock_kkd_ihlali_raporla` | Kişisel koruyucu donanım ihlalini raporlar (kişi sayısı, ihlal tipi) |
+
+`execute_tool()` dispatcher'ı hiçbir zaman exception fırlatmaz: bilinmeyen araç adı, eksik/hatalı-tipli argüman ya da aynı aracın aynı argümanlarla tekrarı, modelin okuyup düzeltebileceği açıklayıcı bir hata dict'i olarak geri döner.
 
 ---
 
-## 📄 Çıktı JSON Formatı (`analiz_sonucu_v2.json`)
+## 🔁 ReAct Döngüsü — Dayanıklılık Garantileri
+
+`core/agent.py`'deki döngü, modelin çok adımlı araç zincirlemesini (bir aracın sonucuna bakıp bir sonrakini tetiklemesini) sağlarken şu durumları da yönetir:
+
+- **İterasyon limiti** (`config.MAX_REACT_ITERATIONS`, varsayılan 5) dolarsa, o ana kadar toplanan adım izini döner ve bunu açık bir `iteration_limit_reached` bayrağıyla işaretler — **asla sahte bir "tamamlandı" cevabı üretmez.**
+- **Zaman aşımı**: model sunucusu yanıt vermezse 2 kez daha dener, üçü de başarısız olursa temiz bir şekilde durur (`aborted` + sebep).
+- **Tekrar koruması**: aynı araç aynı argümanlarla tekrar çağrılırsa (zaten başarıyla çalıştıysa) reddedilir, modele bunu tekrar yapmasına gerek olmadığı söylenir.
+- **Bozuk JSON argümanı**: model geçersiz JSON argüman gönderirse döngü çökmez, hata mesaj geçmişine geri beslenir.
+- **Bozuk final JSON**: model son cevabında geçersiz JSON üretirse `json_repair` ile (veri uydurulmadan) onarılmaya çalışılır; onarılamazsa açık bir hata döner, arayüzde ham çıktı gösterilir.
+
+---
+
+## 📄 Çıktı JSON Formatı
 
 ```json
 {
-  "summary": "Videoda kaza ve yaralanma riski tespit edilmiştir.",
+  "summary": "Videoda forklift kazası ve yaralanma riski gözlenmiştir.",
   "events": [
-    {"time": "00:15", "event": "Forklift devrilmesi"},
+    {"time": "00:15", "event": "Forklift devrildi"},
     {"time": "00:20", "event": "Yerde hareketsiz kişi"}
   ],
-  "risk": "Kritik",
+  "risk": "Yüksek",
   "actions": [
-    "Sağlık ekibini bölgeye yönlendirin"
-  ],
-  "triggered_tools": [
-    {
-      "tool_name": "mock_saglik_ekibi_cagir",
-      "args": {"detay": "00:20'deki hareketsiz kişi için acil çağrı"}
-    }
+    "Sağlık ekibini çağır",
+    "Alanı güvenlik altına al"
   ],
   "telemetry_metrics": {
     "cut_time": 0.12,
@@ -137,6 +160,15 @@ python3 teknofest/benchmark.py
   }
 }
 ```
+
+Gerçekte tetiklenen araç çağrıları (hangi araç, hangi argümanlarla, hangi sonuçla) bu JSON'da değil, ReAct döngüsünün **adım izinde** (`trace`) tutulur — Streamlit arayüzünde "🔄 ReAct Adım İzi" panelinden görülebilir. Bu, önceki sürümlerdeki `triggered_tools` alanının (araç önerisi ile gerçek çalıştırma arasındaki belirsizlik) yerini alır: artık trace'te görünen her satır gerçekten çalıştırılmıştır.
+
+---
+
+## 🚧 Devam eden çalışma
+
+- **`core/detection.py`** — YOLO tabanlı nesne tespitini (`detect_frame`, `detections_to_text`) görsel algı aşamasına ek bağlam olarak besleyecek. Şu an boş stub.
+- **`core/benchmark.py`** — Ground truth klipler üzerinde olay tespiti için P/R/F1 ve tool-call doğruluğu ölçecek (`load_ground_truth`, `run_evaluation`). Şu an boş stub.
 
 ---
 
