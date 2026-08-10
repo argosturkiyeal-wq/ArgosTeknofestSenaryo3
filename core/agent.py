@@ -1,12 +1,14 @@
 import json
 import logging
 import re
+from datetime import datetime
 
 import requests
 import streamlit as st
 from json_repair import repair_json
 
 import config
+import core.memory as memory
 from core.tools import execute_tool, get_tools_schema
 
 logger = logging.getLogger(__name__)
@@ -17,25 +19,33 @@ JSON_OUTPUT_PATH = str(config.JSON_OUTPUT_PATH)
 # "on timeout, retry twice" — sabit bir davranış, config'e taşınacak bir ayar değil.
 REACT_TIMEOUT_RETRIES = 2
 
-REACT_SYSTEM_PROMPT = """Sen bir Savunma Sanayii ve Saha Operasyonu Güvenlik Karar Destek Ajanısın.
+REACT_SYSTEM_PROMPT = f"""Sen bir Savunma Sanayii ve Saha Operasyonu Güvenlik Karar Destek Ajanısın.
 Sana verilen, zaman damgalı video gözlemlerini analiz ederek sahadaki durumu değerlendirir ve gerektiğinde tanımlı araçları (tools) çağırarak somut aksiyonlar alırsın.
 
 Birden fazla adımda, birden fazla aracı sırayla çağırabilirsin. Bir aracın sonucunu gördükten sonra ona göre başka bir araç çağırman tamamen normaldir (ör. önce olay kaydı oluştur, sonra sağlık ekibi çağır, sonra vardiya amirine bildir). Durum tam olarak ele alındığında — gerekli tüm araçlar tetiklendiğinde ya da hiçbir araç gerekmediğinde — daha fazla araç çağırma ve nihai değerlendirmeni yaz.
 
 Operatörün isteği belirsizse tahmin etme, netleştirici soru sor.
 
+Geçmiş örüntü kontrolü:
+- "Geçmiş kayıtlar" bu videodan DEĞİL, sistemde saklı, önceki analizlerden gelen kalıcı veritabanı kayıtlarıdır. Bu videonun kendi içinde aynı ihlalin birkaç kez görünmesi "geçmiş örüntü" SAYILMAZ ve mock_gecmis_sorgula çağırmak için tek başına yeterli değildir.
+- Videoda kkd_ihlali, dusme, arac_kazasi, tehlikeli_yakinlik, bolge_ihlali, yetkisiz_giris veya personel_toplanmasi kategorilerinden birine giren somut bir olay tespit ettiğinde, o olayla ilgili diğer araçları çağırmadan ÖNCE, aynı bölge için mock_gecmis_sorgula'yı çağır ve sistemde bununla ilgili geçmiş kayıt olup olmadığına bak.
+- Sorgu sonucu bir örüntü gösteriyorsa (aynı tip olay 3 veya daha fazla kez kayıtlıysa), bunu özette açıkça belirt ve vardiya amirine yapısal bir bildirim öner.
+- Video hiçbir somut olay/tehlike içermiyorsa (olay_tipi atanacak bir şey yoksa) geçmişi sorgulama — iterasyon bütçesini boşa harcama.
+
 Daha fazla araç çağırmana gerek kalmadığında, SADECE ve KESİNLİKLE aşağıdaki JSON formatında Türkçe olarak nihai değerlendirmeni üret. Başka hiçbir açıklama metni yazma:
 
-{
+{{
   "summary": "Videodaki genel durumun kısa ve net Türkçe özeti",
   "events": [
-    {"time": "00:15", "event": "Tespit edilen 1. olay veya tehlike"}
+    {{"time": "00:15", "event": "Tespit edilen 1. olay veya tehlike", "olay_tipi": "..."}}
   ],
   "risk": "Düşük / Orta / Yüksek / Kritik",
   "actions": [
     "Operatör için 1. aksiyon önerisi"
   ]
-}"""
+}}
+
+Her event nesnesine olay_tipi alanı ekle ve değeri şu listeden seç: {", ".join(config.OLAY_TIPLERI)}. Emin değilsen "diger" kullan."""
 
 def _build_react_messages(chunk_observations, user_prompt):
     obs_text = "\n\n".join([
@@ -87,7 +97,31 @@ def _call_model(messages):
 
     return None, "Model çağrısı başarısız oldu."
 
-def run_react_agent(chunk_observations, user_prompt, model_config=None):
+def _bolge_cikar(trace):
+    """Trace'teki araç çağrısı argümanlarından en yakın bölge/konum bilgisini bulur.
+    Bilinen sınır: ajan hiç araç çağırmazsa (düşük riskli video) bölge None kalır
+    ve o kayıt bölge bazlı sorgulara düşmez. Poligon tabanlı bölge sistemi
+    geldiğinde bu heuristik gereksizleşecek."""
+    for step in trace:
+        args = step.get("arguments") or {}
+        for anahtar in ("bolge", "konum", "hedef_bolge"):
+            if args.get(anahtar):
+                return args[anahtar]
+    return None
+
+def _kaydet_hafizaya(video_id, final, trace):
+    """Başarılı bir final JSON'daki olayları hafızaya yazar. Hata analizi çökertmez, sadece loglanır."""
+    if not isinstance(final, dict) or final.get("status") == "failed":
+        return
+    events = final.get("events")
+    if not events:
+        return
+    try:
+        memory.kaydet_olaylar(video_id, events, bolge=_bolge_cikar(trace))
+    except Exception as e:
+        logger.error("Hafızaya olay kaydı başarısız: %s", e)
+
+def run_react_agent(chunk_observations, user_prompt, model_config=None, video_id=None):
     """
     ReAct döngüsü: model her turda ya bir/birden çok araç çağırır ya da nihai
     cevabını verir. Araç sonuçları mesaj geçmişine (tool_call_id eşleşmesiyle)
@@ -103,6 +137,9 @@ def run_react_agent(chunk_observations, user_prompt, model_config=None):
           "abort_reason": str ya da None,
         }
     """
+    if video_id is None:
+        video_id = datetime.now().strftime("video_%Y%m%d_%H%M%S")
+
     messages = _build_react_messages(chunk_observations, user_prompt)
     trace = []
     seen_calls = set()
@@ -127,8 +164,10 @@ def run_react_agent(chunk_observations, user_prompt, model_config=None):
 
         if not tool_calls:
             final_raw = message.get("content", "") or ""
+            final = parse_json_response(final_raw)
+            _kaydet_hafizaya(video_id, final, trace)
             return {
-                "final": parse_json_response(final_raw),
+                "final": final,
                 "final_raw": final_raw,
                 "trace": trace,
                 "iteration_limit_reached": False,
