@@ -12,7 +12,6 @@ from core.sampler import save_uploaded_file, cut_video, extract_frames_adaptive,
 from core.vision import MODELS, DEFAULT_TEKNOFEST_PROMPT, check_llama_server_health, run_analysis_generator
 from core.agent import run_react_agent, save_json_to_file
 from core.tools import TOOL_REGISTRY, TOOL_CALL_LOG, EVENT_BUS_LOG, mock_saglik_ekibi_cagir, mock_guvenlik_alert_ver, mock_olay_kaydi_olustur
-from ui.zone_editor import render_zone_editor
 
 # ============================================================
 # AYARLAR VE SABİTLER
@@ -50,13 +49,6 @@ if 'extracted_frames_cache' not in st.session_state:
 # ============================================================
 st.title("🛸 TEKNOFEST Yapay Zeka Dil Ajanları Yarışması - v2")
 st.subheader("Senaryo 3: Video Analiz & Karar Destek Ajanı (Savant Mimari Entegreli)")
-
-tab_analysis, tab_editor = st.tabs(["🎥 Video Analiz & Karar Destek", "📍 Bölge Düzenleyici"])
-
-with tab_editor:
-    render_zone_editor()
-
-
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -240,10 +232,9 @@ def render_analysis_results(container):
                 st.code(f"[{entry['ts']}] 📡 [EVENT BUS - {entry['topic']}] Payload: {json.dumps(entry['payload'], ensure_ascii=False)}", language="text")
 
 # --- ANA EKRAN ---
-with tab_analysis:
-    col_video, col_result = st.columns([1.2, 1.8])
-    video_placeholder = col_video.empty()
-    result_container = col_result.container()
+col_video, col_result = st.columns([1.2, 1.8])
+video_placeholder = col_video.empty()
+result_container = col_result.container()
 
 if run_btn:
     if not server_status["online"]:
