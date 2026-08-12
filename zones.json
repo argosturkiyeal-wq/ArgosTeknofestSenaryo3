@@ -1,0 +1,38 @@
+[
+  {
+    "zone_id": "zone_01",
+    "name": "YUKLEME ALANI YASAKLI BOLGE",
+    "type": "yasakli",
+    "polygon": [
+      [0.1, 0.1],
+      [0.4, 0.1],
+      [0.4, 0.6],
+      [0.1, 0.6]
+    ],
+    "rules": {
+      "allowed_classes": ["forklift"],
+      "forbidden_classes": ["person"],
+      "helmet_required": true,
+      "vest_required": false,
+      "speed_limit_kmh": 10.0
+    }
+  },
+  {
+    "zone_id": "zone_02",
+    "name": "YAYA YURU YOLU",
+    "type": "yaya_yolu",
+    "polygon": [
+      [0.5, 0.1],
+      [0.9, 0.1],
+      [0.9, 0.9],
+      [0.5, 0.9]
+    ],
+    "rules": {
+      "allowed_classes": ["person"],
+      "forbidden_classes": ["forklift", "car"],
+      "helmet_required": true,
+      "vest_required": true,
+      "speed_limit_kmh": 5.0
+    }
+  }
+]
