@@ -1,5 +1,5 @@
 """
-Isolated test script for Task B3 (point-in-polygon test) & Task B4 (foot-point rule).
+Test script for point-in-polygon test and foot-point rule verification.
 """
 
 import sys
@@ -19,17 +19,17 @@ from core.zones import (
 
 
 def test_foot_point_calculation():
-    print("Testing B4: Foot point calculation...")
+    print("Testing foot point calculation...")
     # Bbox: (xmin, ymin, xmax, ymax) = (0.2, 0.1, 0.4, 0.5)
     bbox = (0.2, 0.1, 0.4, 0.5)
     foot_pt = get_foot_point(bbox)
     print(f"Bbox {bbox} -> Foot Point: {foot_pt}")
     assert foot_pt == (0.3, 0.5), f"Expected (0.3, 0.5), got {foot_pt}"
-    print("[OK] B4 Foot point calculation test passed!\n")
+    print("[OK] Foot point calculation test passed!\n")
 
 
 def test_point_in_polygon():
-    print("Testing B3: cv2.pointPolygonTest...")
+    print("Testing cv2.pointPolygonTest...")
     poly = [(0.1, 0.1), (0.4, 0.1), (0.4, 0.6), (0.1, 0.6)]
 
     pt_inside = (0.2, 0.3)
@@ -37,11 +37,11 @@ def test_point_in_polygon():
 
     assert is_point_in_polygon(pt_inside, poly) is True, "Point should be inside"
     assert is_point_in_polygon(pt_outside, poly) is False, "Point should be outside"
-    print("[OK] B3 Point-in-polygon test passed!\n")
+    print("[OK] Point-in-polygon test passed!\n")
 
 
 def test_zone_violations():
-    print("Testing B3 & B4: Zone violation logic...")
+    print("Testing zone violation logic...")
     zones = load_zones(REPO_ROOT / "zones.json")
     zone_01 = zones[0]  # Yasakli bolge, forbidden: ["person"]
 
@@ -67,11 +67,11 @@ def test_zone_violations():
     assert viol2 is None, "Person outside zone should not trigger violation"
 
     print(f"Violation Message: {viol1['message']}")
-    print("[OK] B3 & B4 Zone violation test passed!\n")
+    print("[OK] Zone violation test passed!\n")
 
 
 if __name__ == "__main__":
     test_foot_point_calculation()
     test_point_in_polygon()
     test_zone_violations()
-    print("SUCCESS: All B3 and B4 tests passed cleanly!")
+    print("SUCCESS: All zone violation tests passed cleanly!")

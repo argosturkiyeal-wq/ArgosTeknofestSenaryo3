@@ -91,7 +91,7 @@ class Zone:
 
 def get_foot_point(bbox: Tuple[float, float, float, float]) -> Tuple[float, float]:
     """
-    Task B4: Calculate bottom-center (foot point) of bounding box.
+    Calculate bottom-center (foot point) of bounding box.
     bbox: (xmin, ymin, xmax, ymax)
     Returns: (x_center, y_bottom)
     """
@@ -103,7 +103,7 @@ def get_foot_point(bbox: Tuple[float, float, float, float]) -> Tuple[float, floa
 
 def is_point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, float]]) -> bool:
     """
-    Task B3: Check if point (x, y) is inside or on boundary of polygon using cv2.pointPolygonTest.
+    Check if point (x, y) is inside or on boundary of polygon using cv2.pointPolygonTest.
     Coordinates can be normalized (0.0-1.0) or pixel coords.
     """
     poly_np = np.array(polygon, dtype=np.float32)
@@ -114,7 +114,7 @@ def is_point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, f
 
 def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any] | None:
     """
-    Task B3 + B4: Check if detection foot point violates rules of given zone.
+    Check if detection foot point violates rules of given zone.
     detection keys: {"label": str, "bbox": (xmin, ymin, xmax, ymax), "helmet": bool, "vest": bool, ...}
     Returns violation dict if violation detected, else None.
     """
