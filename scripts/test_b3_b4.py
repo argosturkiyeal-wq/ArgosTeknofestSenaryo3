@@ -1,11 +1,11 @@
 """
-Test script for point-in-polygon test and foot-point rule verification.
+Nokta-poligon testi ve ayak noktasi kurali dogrulama betigi.
 """
 
 import sys
 from pathlib import Path
 
-# Add repo root to python path
+# Kok dizini Python yoluna ekle
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -19,59 +19,59 @@ from core.zones import (
 
 
 def test_foot_point_calculation():
-    print("Testing foot point calculation...")
+    print("Ayak noktasi hesabi test ediliyor...")
     # Bbox: (xmin, ymin, xmax, ymax) = (0.2, 0.1, 0.4, 0.5)
     bbox = (0.2, 0.1, 0.4, 0.5)
     foot_pt = get_foot_point(bbox)
-    print(f"Bbox {bbox} -> Foot Point: {foot_pt}")
-    assert foot_pt == (0.3, 0.5), f"Expected (0.3, 0.5), got {foot_pt}"
-    print("[OK] Foot point calculation test passed!\n")
+    print(f"Bbox {bbox} -> Ayak Noktasi: {foot_pt}")
+    assert foot_pt == (0.3, 0.5), f"Beklenen (0.3, 0.5), alinan {foot_pt}"
+    print("[OK] Ayak noktasi hesabi testi gecti!\n")
 
 
 def test_point_in_polygon():
-    print("Testing cv2.pointPolygonTest...")
+    print("cv2.pointPolygonTest test ediliyor...")
     poly = [(0.1, 0.1), (0.4, 0.1), (0.4, 0.6), (0.1, 0.6)]
 
     pt_inside = (0.2, 0.3)
     pt_outside = (0.8, 0.8)
 
-    assert is_point_in_polygon(pt_inside, poly) is True, "Point should be inside"
-    assert is_point_in_polygon(pt_outside, poly) is False, "Point should be outside"
-    print("[OK] Point-in-polygon test passed!\n")
+    assert is_point_in_polygon(pt_inside, poly) is True, "Nokta poligon icinde olmaliydi"
+    assert is_point_in_polygon(pt_outside, poly) is False, "Nokta poligon disinda olmaliydi"
+    print("[OK] Nokta-poligon testi gecti!\n")
 
 
 def test_zone_violations():
-    print("Testing zone violation logic...")
+    print("Bolge ihlal mantigi test ediliyor...")
     zones = load_zones(REPO_ROOT / "zones.json")
     zone_01 = zones[0]  # Yasakli bolge, forbidden: ["person"]
 
-    # Case 1: Person inside zone_01 -> Should trigger forbidden_class violation
+    # Senaryo 1: zone_01 icindeki kisi -> forbidden_class ihlali vermeli
     det_person_in = {
         "label": "person",
-        "bbox": (0.15, 0.2, 0.35, 0.5),  # Foot point: (0.25, 0.5) -> Inside zone_01
+        "bbox": (0.15, 0.2, 0.35, 0.5),  # Ayak noktasi: (0.25, 0.5) -> zone_01 icinde
         "helmet": False,
     }
 
-    # Case 2: Person outside zone_01 -> No violation
+    # Senaryo 2: zone_01 disindaki kisi -> Ihlal vermemeli
     det_person_out = {
         "label": "person",
-        "bbox": (0.7, 0.7, 0.8, 0.9),  # Foot point: (0.75, 0.9) -> Outside zone_01
+        "bbox": (0.7, 0.7, 0.8, 0.9),  # Ayak noktasi: (0.75, 0.9) -> zone_01 disinda
         "helmet": False,
     }
 
     viol1 = check_zone_violation(det_person_in, zone_01)
     viol2 = check_zone_violation(det_person_out, zone_01)
 
-    assert viol1 is not None, "Person inside forbidden zone should trigger violation"
+    assert viol1 is not None, "Yasakli bolgedeki kisi ihlal tetiklemeliydi"
     assert viol1["violation_type"] == "forbidden_class"
-    assert viol2 is None, "Person outside zone should not trigger violation"
+    assert viol2 is None, "Bolge disindaki kisi ihlal tetiklememeliydi"
 
-    print(f"Violation Message: {viol1['message']}")
-    print("[OK] Zone violation test passed!\n")
+    print(f"Ihlal Mesaji: {viol1['message']}")
+    print("[OK] Bolge ihlali testi gecti!\n")
 
 
 if __name__ == "__main__":
     test_foot_point_calculation()
     test_point_in_polygon()
     test_zone_violations()
-    print("SUCCESS: All zone violation tests passed cleanly!")
+    print("BASARILI: Tum bolge ihlal kontrolleri hatasiz gecti!")

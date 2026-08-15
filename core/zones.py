@@ -45,15 +45,15 @@ class Zone:
     zone_id: str
     name: str
     type: str  # yasakli, yaya_yolu, arac_yolu, yukleme_alani
-    polygon: List[Tuple[float, float]]  # [(x1, y1), (x2, y2), ...] normalized 0.0-1.0
+    polygon: List[Tuple[float, float]]  # [(x1, y1), (x2, y2), ...] normalize 0.0-1.0
     rules: ZoneRule = field(default_factory=ZoneRule)
 
     def validate(self) -> bool:
-        # Check polygon has at least 3 points
+        # Poligonun en az 3 noktadan olustugunu kontrol et
         if len(self.polygon) < 3:
             return False
 
-        # Check coordinates are in range [0.0, 1.0]
+        # Koordinatlarin [0.0, 1.0] araliginda oldugunu kontrol et
         for pt in self.polygon:
             if not (0.0 <= pt[0] <= 1.0 and 0.0 <= pt[1] <= 1.0):
                 return False
@@ -75,7 +75,7 @@ class Zone:
         )
 
         if not zone.validate():
-            raise ValueError(f"Invalid polygon or coordinate for zone: {zone.zone_id}")
+            raise ValueError(f"Gecersiz poligon veya koordinat (Zone ID: {zone.zone_id})")
 
         return zone
 
@@ -91,9 +91,9 @@ class Zone:
 
 def get_foot_point(bbox: Tuple[float, float, float, float]) -> Tuple[float, float]:
     """
-    Calculate bottom-center (foot point) of bounding box.
+    Bounding box nesnesinin alt-orta (ayak) noktasini hesaplar.
     bbox: (xmin, ymin, xmax, ymax)
-    Returns: (x_center, y_bottom)
+    Dönüş: (x_center, y_bottom)
     """
     xmin, ymin, xmax, ymax = bbox
     x_center = round((xmin + xmax) / 2.0, 6)
@@ -103,8 +103,7 @@ def get_foot_point(bbox: Tuple[float, float, float, float]) -> Tuple[float, floa
 
 def is_point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, float]]) -> bool:
     """
-    Check if point (x, y) is inside or on boundary of polygon using cv2.pointPolygonTest.
-    Coordinates can be normalized (0.0-1.0) or pixel coords.
+    cv2.pointPolygonTest kullanarak noktanin poligon icinde veya sinirinda olup olmadigini kontrol eder.
     """
     poly_np = np.array(polygon, dtype=np.float32)
     pt = (float(point[0]), float(point[1]))
@@ -114,9 +113,7 @@ def is_point_in_polygon(point: Tuple[float, float], polygon: List[Tuple[float, f
 
 def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any] | None:
     """
-    Check if detection foot point violates rules of given zone.
-    detection keys: {"label": str, "bbox": (xmin, ymin, xmax, ymax), "helmet": bool, "vest": bool, ...}
-    Returns violation dict if violation detected, else None.
+    Tespit edilen nesnenin ayak noktasinin bolge kurallarini ihlal edip etmedigini kontrol eder.
     """
     bbox = detection.get("bbox")
     if not bbox or len(bbox) != 4:
@@ -129,7 +126,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
     label = detection.get("label", "unknown")
     rules = zone.rules
 
-    # 1. Check forbidden classes
+    # 1. Yasakli siniflari kontrol et
     if label in rules.forbidden_classes:
         return {
             "zone_id": zone.zone_id,
@@ -140,7 +137,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
             "detection": detection,
         }
 
-    # 2. Check allowed classes if defined
+    # 2. Izin verilen siniflari kontrol et (tanimlandiysa)
     if rules.allowed_classes and label not in rules.allowed_classes:
         return {
             "zone_id": zone.zone_id,
@@ -151,7 +148,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
             "detection": detection,
         }
 
-    # 3. Check helmet requirement for person
+    # 3. Kisi icin baret zorunlulugunu kontrol et
     if label == "person" and rules.helmet_required and not detection.get("helmet", True):
         return {
             "zone_id": zone.zone_id,
@@ -162,7 +159,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
             "detection": detection,
         }
 
-    # 4. Check vest requirement for person
+    # 4. Kisi icin yelek zorunlulugunu kontrol et
     if label == "person" and rules.vest_required and not detection.get("vest", True):
         return {
             "zone_id": zone.zone_id,
@@ -177,7 +174,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
 
 
 def check_all_zones_violations(detections: List[Dict[str, Any]], zones: List[Zone]) -> List[Dict[str, Any]]:
-    """Check list of detections against all zones."""
+    """Tespit edilen tum nesneleri tum bolgelere karsi kontrol eder."""
     violations = []
     for det in detections:
         for z in zones:
@@ -189,9 +186,8 @@ def check_all_zones_violations(detections: List[Dict[str, Any]], zones: List[Zon
 
 class ZoneDebouncer:
     """
-    Flicker filter for zone violations.
-    Requires N consecutive frames of violation before confirming alarm.
-    Prevents false positives from single-frame detection noise.
+    Bolge ihlalleri icin titreme (debounce) filtresi.
+    Tek karelik gürültüleri filtrelemek icin alarm vermeden once N ardisik kare boyunca ihlal sartini arar.
     """
 
     def __init__(self, consecutive_threshold: int = 3):
@@ -207,8 +203,8 @@ class ZoneDebouncer:
 
     def process_frame_violations(self, raw_violations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Process violations detected in current frame.
-        Returns list of confirmed violations meeting consecutive frame threshold.
+        Mevcut karedeki ihlalleri isler.
+        N ardisik kare sartini saglayan onaylanmis ihlalleri doner.
         """
         current_keys = set()
         confirmed_violations = []
@@ -225,7 +221,7 @@ class ZoneDebouncer:
                 viol_copy["consecutive_count"] = self.counters[key]
                 confirmed_violations.append(viol_copy)
 
-        # Reset counters for violations no longer active in this frame
+        # Bu karede aktif olmayan ihlallerin sayaclarini sifirla
         missing_keys = set(self.counters.keys()) - current_keys
         for mk in missing_keys:
             self.counters[mk] = 0
@@ -233,12 +229,12 @@ class ZoneDebouncer:
         return confirmed_violations
 
     def reset(self) -> None:
-        """Reset internal violation counters."""
+        """Dahili ihlal sayaclarini sifirlar."""
         self.counters.clear()
 
 
 def load_zones(filepath: str | Path) -> List[Zone]:
-    """Read zones from JSON file."""
+    """Bolgeleri JSON dosyasindan okur."""
     path = Path(filepath)
     if not path.exists():
         return []
@@ -247,18 +243,16 @@ def load_zones(filepath: str | Path) -> List[Zone]:
         data = json.load(f)
 
     if not isinstance(data, list):
-        raise ValueError("zones.json must contain a list of zone objects")
+        raise ValueError("zones.json bir bolge nesneleri listesi icermelidir")
 
     return [Zone.from_dict(item) for item in data]
 
 
 def save_zones(zones: List[Zone], filepath: str | Path) -> None:
-    """Save zones list to JSON file."""
+    """Bolge listesini JSON dosyasina kaydeder."""
     path = Path(filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     data = [z.to_dict() for z in zones]
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
-
