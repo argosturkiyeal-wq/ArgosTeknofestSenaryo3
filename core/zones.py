@@ -187,6 +187,56 @@ def check_all_zones_violations(detections: List[Dict[str, Any]], zones: List[Zon
     return violations
 
 
+class ZoneDebouncer:
+    """
+    Flicker filter for zone violations.
+    Requires N consecutive frames of violation before confirming alarm.
+    Prevents false positives from single-frame detection noise.
+    """
+
+    def __init__(self, consecutive_threshold: int = 3):
+        self.consecutive_threshold = max(1, consecutive_threshold)
+        self.counters: Dict[str, int] = {}
+
+    def _get_violation_key(self, viol: Dict[str, Any]) -> str:
+        det = viol.get("detection", {})
+        track_id = det.get("track_id", det.get("label", "unknown"))
+        zone_id = viol.get("zone_id", "unknown_zone")
+        viol_type = viol.get("violation_type", "unknown_type")
+        return f"{zone_id}_{viol_type}_{track_id}"
+
+    def process_frame_violations(self, raw_violations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Process violations detected in current frame.
+        Returns list of confirmed violations meeting consecutive frame threshold.
+        """
+        current_keys = set()
+        confirmed_violations = []
+
+        for viol in raw_violations:
+            key = self._get_violation_key(viol)
+            current_keys.add(key)
+
+            self.counters[key] = self.counters.get(key, 0) + 1
+
+            if self.counters[key] >= self.consecutive_threshold:
+                viol_copy = dict(viol)
+                viol_copy["is_confirmed"] = True
+                viol_copy["consecutive_count"] = self.counters[key]
+                confirmed_violations.append(viol_copy)
+
+        # Reset counters for violations no longer active in this frame
+        missing_keys = set(self.counters.keys()) - current_keys
+        for mk in missing_keys:
+            self.counters[mk] = 0
+
+        return confirmed_violations
+
+    def reset(self) -> None:
+        """Reset internal violation counters."""
+        self.counters.clear()
+
+
 def load_zones(filepath: str | Path) -> List[Zone]:
     """Read zones from JSON file."""
     path = Path(filepath)
@@ -210,4 +260,5 @@ def save_zones(zones: List[Zone], filepath: str | Path) -> None:
     data = [z.to_dict() for z in zones]
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
 
