@@ -26,11 +26,12 @@ Birden fazla adımda, birden fazla aracı sırayla çağırabilirsin. Bir aracı
 
 Operatörün isteği belirsizse tahmin etme, netleştirici soru sor.
 
-Geçmiş örüntü kontrolü:
-- "Geçmiş kayıtlar" bu videodan DEĞİL, sistemde saklı, önceki analizlerden gelen kalıcı veritabanı kayıtlarıdır. Bu videonun kendi içinde aynı ihlalin birkaç kez görünmesi "geçmiş örüntü" SAYILMAZ ve mock_gecmis_sorgula çağırmak için tek başına yeterli değildir.
-- Videoda kkd_ihlali, dusme, arac_kazasi, tehlikeli_yakinlik, bolge_ihlali, yetkisiz_giris veya personel_toplanmasi kategorilerinden birine giren somut bir olay tespit ettiğinde, o olayla ilgili diğer araçları çağırmadan ÖNCE, aynı bölge için mock_gecmis_sorgula'yı çağır ve sistemde bununla ilgili geçmiş kayıt olup olmadığına bak.
-- Sorgu sonucu bir örüntü gösteriyorsa (aynı tip olay 3 veya daha fazla kez kayıtlıysa), bunu özette açıkça belirt ve vardiya amirine yapısal bir bildirim öner.
-- Video hiçbir somut olay/tehlike içermiyorsa (olay_tipi atanacak bir şey yoksa) geçmişi sorgulama — iterasyon bütçesini boşa harcama.
+ZORUNLU ADIM SIRASI:
+1. Tespit ettiğin her olayın olay_tipi'ni belirle.
+2. Bu olay tiplerinden en az biri kkd_ihlali, dusme, arac_kazasi, tehlikeli_yakinlik, bolge_ihlali, yetkisiz_giris veya personel_toplanmasi ise, DİĞER HİÇBİR ARACI ÇAĞIRMADAN ÖNCE mock_gecmis_sorgula ile o bölgeyi sorgula. ("Geçmiş kayıtlar" bu videodan değil, sistemde saklı önceki analizlerden gelir — bu videonun kendi içindeki tekrar bu adımı atlamak için gerekçe değildir.)
+3. Sorgu sonucunda 2 veya daha fazla benzer kayıt varsa, bunu final summary alanında açıkça belirtmek ZORUNLUDUR ve vardiya amirine yapısal bir bildirim öner.
+4. Sorgu sonucunu gördükten sonra diğer araçları çağır.
+5. Video hiçbir olay_tipi ataması gerektirmiyorsa (tamamen olaysız), 2. adımı atla — iterasyon bütçesini boşa harcama.
 
 Daha fazla araç çağırmana gerek kalmadığında, SADECE ve KESİNLİKLE aşağıdaki JSON formatında Türkçe olarak nihai değerlendirmeni üret. Başka hiçbir açıklama metni yazma:
 
@@ -45,7 +46,19 @@ Daha fazla araç çağırmana gerek kalmadığında, SADECE ve KESİNLİKLE aşa
   ]
 }}
 
-Her event nesnesine olay_tipi alanı ekle ve değeri şu listeden seç: {", ".join(config.OLAY_TIPLERI)}. Emin değilsen "diger" kullan."""
+Her event nesnesine olay_tipi ekle. event metni gözlemdeki ifadeyi yeniden yazmasın, sadece kısaltsın — gözlemdeki somut fiilleri (düştü, çarptı, devrildi, sıkıştı vb.) özetleme sırasında kaybetme.
+
+Şu listeden EN UYGUN olanı seç:
+- kkd_ihlali: baret, yelek, eldiven gibi koruyucu donanım eksikliği
+- dusme: kişinin yere düşmesi, kayması, yüksekten düşme
+- arac_kazasi: forklift/araç devrilmesi, çarpması, kontrol kaybı
+- tehlikeli_yakinlik: kişi ile araç/makine arasında güvensiz mesafe
+- bolge_ihlali: yetkisiz bölgeye giriş, yaya alanı ihlali
+- yetkisiz_giris: tesise izinsiz kişi/araç girişi
+- personel_toplanmasi: olay yerinde kalabalık oluşması
+- diger: SADECE yukarıdakilerin hiçbiri uymuyorsa
+
+Bir olay birden fazla kategoriye giriyorsa (örn. forklift devrilmesi sonucu kişinin düşmesi), İKİ AYRI event olarak yaz: biri arac_kazasi, biri dusme. "diger" seçmeden önce olayı parçalara ayırmayı dene."""
 
 def _build_react_messages(chunk_observations, user_prompt):
     obs_text = "\n\n".join([
