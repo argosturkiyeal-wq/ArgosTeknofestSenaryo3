@@ -126,7 +126,40 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
     label = detection.get("label", "unknown")
     rules = zone.rules
 
-    # 1. Yasakli siniflari kontrol et
+    # 1. Arac yaya alaninda ihlali
+    if zone.type == "yaya_yolu" and label in ["car", "truck", "forklift", "vehicle"]:
+        return {
+            "zone_id": zone.zone_id,
+            "zone_name": zone.name,
+            "violation_type": "vehicle_in_pedestrian_zone",
+            "foot_point": foot_pt,
+            "message": f"Arac yaya alaninda: '{label}' araci '{zone.name}' yaya yolunda tespit edildi.",
+            "detection": detection,
+        }
+
+    # 2. Yaya arac bandinda ihlali
+    if zone.type in ["arac_yolu", "yukleme_alani"] and label == "person":
+        return {
+            "zone_id": zone.zone_id,
+            "zone_name": zone.name,
+            "violation_type": "pedestrian_in_vehicle_lane",
+            "foot_point": foot_pt,
+            "message": f"Yaya arac bandinda: Person nesnesi '{zone.name}' arac yolunda tespit edildi.",
+            "detection": detection,
+        }
+
+    # 3. Yolda engel ihlali
+    if zone.type == "arac_yolu" and label in ["box", "obstacle", "debris", "pallet"]:
+        return {
+            "zone_id": zone.zone_id,
+            "zone_name": zone.name,
+            "violation_type": "obstacle_on_road",
+            "foot_point": foot_pt,
+            "message": f"Yolda engel tespiti: '{label}' nesnesi '{zone.name}' arac yolunu engelliyor.",
+            "detection": detection,
+        }
+
+    # 4. Yasakli siniflari kontrol et
     if label in rules.forbidden_classes:
         return {
             "zone_id": zone.zone_id,
@@ -137,7 +170,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
             "detection": detection,
         }
 
-    # 2. Izin verilen siniflari kontrol et (tanimlandiysa)
+    # 5. Izin verilen siniflari kontrol et (tanimlandiysa)
     if rules.allowed_classes and label not in rules.allowed_classes:
         return {
             "zone_id": zone.zone_id,
@@ -148,7 +181,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
             "detection": detection,
         }
 
-    # 3. Kisi icin baret zorunlulugunu kontrol et
+    # 6. Kisi icin baret zorunlulugunu kontrol et
     if label == "person" and rules.helmet_required and not detection.get("helmet", True):
         return {
             "zone_id": zone.zone_id,
@@ -159,7 +192,7 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
             "detection": detection,
         }
 
-    # 4. Kisi icin yelek zorunlulugunu kontrol et
+    # 7. Kisi icin yelek zorunlulugunu kontrol et
     if label == "person" and rules.vest_required and not detection.get("vest", True):
         return {
             "zone_id": zone.zone_id,
@@ -176,11 +209,31 @@ def check_zone_violation(detection: Dict[str, Any], zone: Zone) -> Dict[str, Any
 def check_all_zones_violations(detections: List[Dict[str, Any]], zones: List[Zone]) -> List[Dict[str, Any]]:
     """Tespit edilen tum nesneleri tum bolgelere karsi kontrol eder."""
     violations = []
+    pedestrian_zones = [z for z in zones if z.type == "yaya_yolu"]
+
     for det in detections:
+        bbox = det.get("bbox")
+        label = det.get("label", "unknown")
+
+        # 4. Yaya alan disinda ihlali kontrolu
+        if bbox and len(bbox) == 4 and label == "person" and pedestrian_zones:
+            foot_pt = get_foot_point(bbox)
+            in_safe_zone = any(is_point_in_polygon(foot_pt, z.polygon) for z in pedestrian_zones)
+            if not in_safe_zone:
+                violations.append({
+                    "zone_id": "outside_zone",
+                    "zone_name": "GUVENLI YAYA ALANI DISI",
+                    "violation_type": "pedestrian_outside_safe_zone",
+                    "foot_point": foot_pt,
+                    "message": "Yaya alan disinda: Person nesnesi guvenli yaya yolu disinda tespit edildi.",
+                    "detection": det,
+                })
+
         for z in zones:
             viol = check_zone_violation(det, z)
             if viol:
                 violations.append(viol)
+
     return violations
 
 
