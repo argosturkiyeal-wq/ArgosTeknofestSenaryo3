@@ -63,3 +63,16 @@ Bu dosya, geliştirme sürecinde karşılaşılan teknik zorlukları ve bunlara 
 **Çıkarım:** Prompt büyüdükçe bu tür "talimat aşınması" riski artacak — bugün iki kuralı (geçmiş sorgulama + olay_tipi seçimi) yerleştirebildik, ama üçüncü, dördüncü kural eklendikçe aynı sorun muhtemelen tekrar çıkacak. Bunu şimdi kalıcı olarak çözmüyoruz (örn. daha yapılandırılmış bir prompt şablonu, kuralları ayrı bir doğrulama/post-processing katmanına taşımak gibi seçenekler ileride değerlendirilebilir) — bilerek erteliyoruz, farkındalığı buraya not düşüyoruz.
 
 **Neden önemli:** Bu, "prompt engineering" bileşeninin tek seferlik bir yazım işi değil, sürüm arttıkça yönetilmesi gereken, ölçülmesi gereken bir mühendislik yükü olduğunun somut kanıtı — jürinin ayrı bir bileşen olarak değerlendirdiği bir konuda değerli bir gözlem.
+
+
+---
+
+## 2026-08-20 — Tracker ID sürekliliği düşme anında kırılıyor, "yatay + hareketsiz" kombinasyonu kaçıyor
+
+**Problem:** Zamansal analiz katmanı (`core/tracking.py`, N7-N10) gerçek bir "kayıp düşme" videosuyla (`adult-man-slips-and-falls-on-ice...`) test edildi. Sistem kişinin düştüğünü ve uzun süre hareketsiz kaldığını doğru tespit etti (`kisi#403 son 3.0 sn'dir hareketsiz`), ve düşüş anına yakın bir karede "yatay konumda" sinyali de üretildi. Ama tasarımın hedeflediği kritik kombinasyon — aynı kişi için **aynı anda** hem yatay hem 3sn+ hareketsiz — hiç tetiklenmedi.
+
+**Kök neden:** Ultralytics'in yerleşik tracker'ı (ByteTrack, `persist=True`), düşme anındaki hızlı hareket ve kısmi kapanma (occlusion) nedeniyle aynı fiziksel kişiyi kaybedip yeniden algıladığında **yeni bir `track_id` atıyor**. Bu videoda aynı kişi 24 saniye içinde 5 farklı ID aldı: `kisi#5 → #79 → #368 → #403 → #422`. `is_still()` her track_id için ayrı bir geçmiş penceresi tutuyor (N7 tasarımı gereği - track'ler arası kimlik eşleştirmesi yok), yani ID her değiştiğinde 3 saniyelik hareketsizlik gözlemi sıfırdan başlıyor. "Yatay" sinyali bir ID altında (`#422`) tetiklendi, "3sn+ hareketsiz" onayı ise farklı bir ID altında (`#403`) geldi — ikisi hiçbir zaman aynı track_id + aynı an için birleşmedi.
+
+**Neden düzeltilmedi (bilinçli tercih):** N7 talimatı açıkça "Ultralytics'in yerleşik tracker'ı yeterli, kendi IoU eşleştirmemizi yazma" diyordu. Track ID'ler arası kimlik sürekliliğini (re-identification / eski ID ile yeni ID'yi "aynı kişi" olarak birleştirme) kendi başımıza çözmek, tracker'ın üstüne ayrı bir eşleştirme katmanı yazmak anlamına gelir — kapsam dışı bırakıldı, ölçülmüş bir sınırlama olarak burada belgeleniyor.
+
+**Neden önemli:** Bu, "ölçülebilir gözlem üret, yorumu VLM'e bırak" tasarım ilkesinin (bkz. `core/tracking.py` docstring) kendi içindeki bir gerilimi gösteriyor: ölçüm zinciri (track kimliği) kırılırsa, doğru ölçülmüş iki ayrı gözlem (yatay VE hareketsiz) birleşip anlamlı bir sinyale dönüşemiyor. Kısa vadeli hafifletme zaten kodda var: `SignalThrottle` spam'i önlüyor ve state-transition'da anında yayın yapıyor, ama ID sürekliliği sorununu çözmüyor. Kalıcı çözüm (basit bir mesafe/IoU tabanlı "track_id yeniden bağlama" katmanı ya da her track_id için ayrı ayrı üretilen sinyallerin VLM'e "muhtemelen aynı kişi" notuyla birlikte verilmesi) planlanan ama şimdilik ertelenen bir sonraki adım.

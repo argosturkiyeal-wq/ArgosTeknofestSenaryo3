@@ -25,6 +25,9 @@ env/
 # Temporary folders
 Kod/frames/
 Kod/*.mp4
+
+# Kisisel deneme/test klasoru (gecici test scriptleri, ornek gorsel/video)
+scripts/tmp_test/
 # Models and weights
 *.gguf
 *.pt
