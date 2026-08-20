@@ -1,0 +1,33 @@
+# Zamansal analiz katmani (N7-N10, core/tracking.py) esikleri.
+# Kamera acisi ve cozunurluge gore kalibrasyon gerektirir - bu yuzden
+# koda gomulu degil, ayri bir dosyada. Degerleri degistirmek icin kod
+# degisikligi/deploy gerekmez.
+
+tracking:
+  # N7: track gecmisi kayan penceresi. Bu sureden eski noktalar atilir,
+  # bellek sinirsiz buyumez.
+  history_window_seconds: 5.0
+
+stillness:
+  # N9: hareketsizlik karari icin bakilan sure ve izin verilen piksel kaymasi.
+  # pixel_tolerance 1080p referans alinarak kalibre edildi; farkli
+  # cozunurlukte yeniden kalibre edilmeli.
+  window_seconds: 3.0
+  pixel_tolerance: 20
+
+horizontal:
+  # N8: bbox genislik/yukseklik orani bu esigi gecerse "yatay konum" ipucu.
+  # Ayakta kisi ~0.4, yatan kisi >1.2 civarinda olcunca kalibre edildi.
+  aspect_ratio_threshold: 1.2
+
+proximity:
+  # N10: iki nesne merkezi arasi mesafe / goruntu genisligi bu esigin
+  # altindaysa "tehlikeli yakinlik". Piksel degil, kadraja oranli.
+  distance_ratio_threshold: 0.15
+
+signals:
+  # process_video() her karede ayni sinyali tekrar tekrar uretmesin diye:
+  # bir sinyal (track_id + tur basina) en erken bu kadar saniye sonra
+  # tekrar yayinlanir. Durum degisiminde (ör. hareketsizden hareketliye)
+  # bu bekleme atlanir - degisim her zaman hemen raporlanir.
+  repeat_interval_seconds: 2.0
