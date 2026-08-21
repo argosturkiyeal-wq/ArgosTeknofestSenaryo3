@@ -83,7 +83,10 @@ def detect_frame(
     for model_name in model_names:
         yolo = _load_model(model_name)
         model_conf = conf if conf is not None else config.YOLO_MODEL_CONF.get(model_name, DEFAULT_CONF)
-        results = yolo.predict(source=image_path, conf=model_conf, verbose=False)
+        # device="cpu": VRAM zaten llama-server (VLM) tarafindan doluyor;
+        # YOLO'yu da GPU'ya koymak CUDA OOM riski dogurur. Modeller kucuk
+        # oldugu icin CPU'da da kare basina hizli calisir.
+        results = yolo.predict(source=image_path, conf=model_conf, device="cpu", verbose=False)
         for result in results:
             names = result.names
             for box in result.boxes:

@@ -1,8 +1,12 @@
+import base64
 import time
 
+import cv2
+import numpy as np
 import requests
 
 import config
+from core.detection import detect_frame, detections_to_text
 
 LLAMA_SERVER_URL = config.LLAMA_SERVER_URL
 
@@ -82,9 +86,17 @@ def run_analysis_generator(image_items, prompt, model_config):
         b64_img = item.get("b64", "")
         ts = item.get("timestamp", "00:00")
 
+        # YOLO on-elek: VLM'e kareyi "kor" gostermek yerine, onceden
+        # tespit edilmis nesneleri (kisi/baret/yelek/forklift) metin
+        # olarak da veriyoruz - dusuk seviyeli algi, yuksek seviyeli
+        # yoruma (VLM) kanit olarak akar.
+        img_arr = cv2.imdecode(np.frombuffer(base64.b64decode(b64_img), dtype=np.uint8), cv2.IMREAD_COLOR)
+        detections = detect_frame(img_arr) if img_arr is not None else []
+        det_text = detections_to_text(detections, ts)
+
         content.append({
             "type": "text",
-            "text": f"\n[Zaman Damgası: {ts}] Kare Görseli:"
+            "text": f"\n[Zaman Damgası: {ts}] Kare Görseli:\n{det_text}"
         })
         content.append({
             "type": "image_url",
